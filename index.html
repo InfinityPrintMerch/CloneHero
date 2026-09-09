@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>Clone Hero · Biblioteca</title>
+
+<!-- JSZip permite leer album.zip dentro del navegador -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
 <style>
 :root{
   --bg:#1f1f1f;
@@ -20,12 +24,8 @@
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{
-  margin:0;
-  min-height:100vh;
-  color:var(--text);
-  background:
-    radial-gradient(circle at 15% -10%,rgba(255,212,0,.12),transparent 30rem),
-    var(--bg);
+  margin:0;min-height:100vh;color:var(--text);
+  background:radial-gradient(circle at 15% -10%,rgba(255,212,0,.12),transparent 30rem),var(--bg);
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
 button,input,select{font:inherit}
@@ -40,7 +40,7 @@ h1{font-size:clamp(22px,3vw,31px);letter-spacing:-.045em;margin:0;line-height:1}
 .filters{
   position:sticky;top:10px;z-index:10;
   display:grid;grid-template-columns:minmax(260px,1fr) 220px 220px;gap:11px;
-  margin-bottom:26px;padding:13px;border:1px solid var(--line);border-radius:22px;
+  margin-bottom:18px;padding:13px;border:1px solid var(--line);border-radius:22px;
   background:rgba(48,48,48,.92);backdrop-filter:blur(18px);box-shadow:0 20px 50px rgba(0,0,0,.25)
 }
 .search{position:relative}
@@ -49,6 +49,14 @@ input,select{height:52px;width:100%;border:1px solid transparent;outline:none;bo
 input{padding:0 16px 0 49px}
 select{padding:0 40px 0 15px;appearance:none;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,#aaa 50%),linear-gradient(135deg,#aaa 50%,transparent 50%);background-position:calc(100% - 19px) 22px,calc(100% - 14px) 22px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;background-color:var(--panel2)}
 input:focus,select:focus{border-color:rgba(255,212,0,.85);box-shadow:0 0 0 4px rgba(255,212,0,.08)}
+.zip-status{display:flex;align-items:center;gap:10px;min-height:42px;margin:0 2px 20px;padding:9px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(48,48,48,.58);color:var(--muted);font-size:12px}
+.zip-status.ready{color:#d7d7d7}
+.zip-status.error{color:#ff9b9b}
+.zip-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--yellow);box-shadow:0 0 0 5px rgba(255,212,0,.08)}
+.zip-status.ready .zip-dot{background:#7bdc8a;box-shadow:0 0 0 5px rgba(123,220,138,.08)}
+.zip-status.error .zip-dot{background:#ff7777;box-shadow:0 0 0 5px rgba(255,119,119,.08)}
+.progress{flex:1;height:4px;max-width:220px;overflow:hidden;border-radius:999px;background:#1f1f1f}
+.progress>span{display:block;width:0;height:100%;border-radius:inherit;background:var(--yellow);transition:width .15s linear}
 .headline{display:flex;justify-content:space-between;align-items:end;gap:16px;margin:0 3px 16px}
 .headline h2{font-size:16px;margin:0;letter-spacing:-.02em}
 .headline span{font-size:12px;color:var(--muted)}
@@ -56,12 +64,13 @@ input:focus,select:focus{border-color:rgba(255,212,0,.85);box-shadow:0 0 0 4px r
 .card{min-width:0;overflow:hidden;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);transition:transform .18s,border-color .18s,box-shadow .18s}
 .card:hover{transform:translateY(-4px);border-color:rgba(255,212,0,.32);box-shadow:0 18px 38px rgba(0,0,0,.24)}
 .coverbox{position:relative;aspect-ratio:1;overflow:hidden;background:#272727}
-.cover{display:block;width:100%;height:100%;object-fit:cover;transition:transform .25s}
+.cover{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;transition:transform .25s,opacity .22s;opacity:0}
+.cover.loaded{opacity:1}
 .card:hover .cover{transform:scale(1.025)}
-.placeholder{width:100%;height:100%;display:grid;place-items:center;background:radial-gradient(circle at 30% 25%,rgba(255,212,0,.18),transparent 45%),#272727}
+.placeholder{position:absolute;inset:0;width:100%;height:100%;display:grid;place-items:center;background:radial-gradient(circle at 30% 25%,rgba(255,212,0,.18),transparent 45%),#272727}
 .disc{width:42%;aspect-ratio:1;border-radius:50%;border:15px solid #171717;background:var(--yellow);box-shadow:inset 0 0 0 13px #373737,0 8px 22px rgba(0,0,0,.3);position:relative;opacity:.9}
 .disc:after{content:"";position:absolute;width:18%;aspect-ratio:1;border-radius:50%;background:#171717;left:50%;top:50%;transform:translate(-50%,-50%)}
-.genre{position:absolute;left:10px;bottom:10px;max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:7px 9px;border-radius:10px;background:rgba(20,20,20,.86);border:1px solid rgba(255,255,255,.09);backdrop-filter:blur(8px);color:var(--yellow);font-size:10px;font-weight:800}
+.genre{position:absolute;z-index:3;left:10px;bottom:10px;max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:7px 9px;border-radius:10px;background:rgba(20,20,20,.86);border:1px solid rgba(255,255,255,.09);backdrop-filter:blur(8px);color:var(--yellow);font-size:10px;font-weight:800}
 .info{padding:14px 14px 15px}
 .song{margin:0;font-size:15px;font-weight:850;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.02em}
 .artist{margin:7px 0 0;color:var(--yellow);font-size:12.5px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -73,7 +82,7 @@ input:focus,select:focus{border-color:rgba(255,212,0,.85);box-shadow:0 0 0 4px r
 @keyframes pulse{from{opacity:.4;transform:scale(.8)}to{opacity:1;transform:scale(1.05)}}
 footer{text-align:center;color:#777;font-size:11px;padding-top:35px}
 @media(max-width:900px){.filters{grid-template-columns:1fr 1fr}.search{grid-column:1/-1}}
-@media(max-width:620px){.container{width:calc(100% - 22px);padding-top:18px}.total{display:none}.filters{grid-template-columns:1fr;padding:10px;top:6px;border-radius:18px}.search{grid-column:auto}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.info{padding:11px}.song{font-size:13px}.artist{font-size:11px}.album{font-size:10px}.genre{font-size:9px}}
+@media(max-width:620px){.container{width:calc(100% - 22px);padding-top:18px}.total{display:none}.filters{grid-template-columns:1fr;padding:10px;top:6px;border-radius:18px}.search{grid-column:auto}.zip-status{align-items:flex-start;flex-wrap:wrap}.progress{max-width:none;flex-basis:100%}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.info{padding:11px}.song{font-size:13px}.artist{font-size:11px}.album{font-size:10px}.genre{font-size:9px}}
 @media(max-width:380px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -99,28 +108,238 @@ footer{text-align:center;color:#777;font-size:11px;padding-top:35px}
   <select id="artist"><option value="">Todos los artistas</option></select>
 </section>
 
+<div id="zipStatus" class="zip-status">
+  <span class="zip-dot"></span>
+  <span id="zipText">Preparando portadas...</span>
+  <div class="progress"><span id="zipProgress"></span></div>
+</div>
+
 <div class="headline"><h2>Resultados</h2><span id="count">Cargando...</span></div>
 <div id="loading" class="loading"><span class="dot"></span>Cargando biblioteca...</div>
 <section id="grid" class="grid"></section>
 <section id="empty" class="empty"><strong>No encontré canciones</strong>Prueba otra búsqueda o cambia los filtros.</section>
-<footer>Biblioteca local · Clone Hero</footer>
+<footer>Biblioteca web · Clone Hero</footer>
 </main>
 
 <script>
 "use strict";
-let songs=[];
-const $=id=>document.getElementById(id);
-const q=$("q"), genre=$("genre"), artist=$("artist"), grid=$("grid"), empty=$("empty"), count=$("count"), total=$("total"), loading=$("loading");
-const collator=new Intl.Collator("es",{sensitivity:"base",numeric:true});
+
+const JSON_URL = "songs.json";
+const ZIP_URL = "album.zip";
+
+let songs = [];
+let albumZip = null;
+let zipReady = false;
+const visibleCoverBoxes = new Set();
+
+const $ = id => document.getElementById(id);
+const q = $("q"), genre = $("genre"), artist = $("artist"), grid = $("grid"), empty = $("empty"), count = $("count"), total = $("total"), loading = $("loading"), zipStatus = $("zipStatus"), zipText = $("zipText"), zipProgress = $("zipProgress");
+const collator = new Intl.Collator("es", {sensitivity:"base", numeric:true});
+
 function norm(v){return String(v??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim()}
 function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
 function unique(values){return [...new Set(values.filter(Boolean))].sort((a,b)=>collator.compare(a,b))}
-function fillSelect(el,values,label){const frag=document.createDocumentFragment();const first=document.createElement("option");first.value="";first.textContent=label;frag.append(first);for(const value of values){const op=document.createElement("option");op.value=value;op.textContent=value;frag.append(op)}el.replaceChildren(frag)}
-function card(s){const el=document.createElement("article");el.className="card";el.title=`${s.name} — ${s.artist}`;const cover=s.cover?`<img class="cover" src="${esc(s.cover)}" alt="Portada de ${esc(s.album)}" loading="lazy">`:`<div class="placeholder"><div class="disc"></div></div>`;el.innerHTML=`<div class="coverbox">${cover}<span class="genre">${esc(s.genre)}</span></div><div class="info"><h3 class="song">${esc(s.name)}</h3><p class="artist">${esc(s.artist)}</p><p class="album">${esc(s.album)}</p></div>`;return el}
-function render(list){const frag=document.createDocumentFragment();for(const s of list)frag.append(card(s));grid.replaceChildren(frag);count.textContent=`${list.length.toLocaleString("es-MX")} resultado${list.length===1?"":"s"}`;empty.style.display=list.length?"none":"block"}
-function apply(){const terms=norm(q.value).split(/\s+/).filter(Boolean),g=genre.value,a=artist.value;const list=songs.filter(s=>{if(g&&s.genre!==g)return false;if(a&&s.artist!==a)return false;if(!terms.length)return true;const hay=norm(`${s.name} ${s.artist} ${s.album} ${s.genre}`);return terms.every(t=>hay.includes(t))});render(list)}
-async function load(){try{const r=await fetch("songs.json",{cache:"no-store"});if(!r.ok)throw new Error(`HTTP ${r.status}`);songs=await r.json();total.textContent=songs.length.toLocaleString("es-MX");fillSelect(genre,unique(songs.map(s=>s.genre)),"Todos los géneros");fillSelect(artist,unique(songs.map(s=>s.artist)),"Todos los artistas");loading.style.display="none";render(songs)}catch(e){console.error(e);loading.innerHTML='<strong style="color:#fff">No pude cargar songs.json</strong><br><br>Ejecuta esta página desde el servidor local del Python, no abriendo index.html directamente.'}}
-let timer=null;q.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(apply,70)});genre.addEventListener("change",apply);artist.addEventListener("change",apply);load();
+function formatBytes(bytes){if(!Number.isFinite(bytes)||bytes<=0)return "";const units=["B","KB","MB","GB"];let value=bytes,unit=0;while(value>=1024&&unit<units.length-1){value/=1024;unit++}return `${value.toFixed(unit===0?0:1)} ${units[unit]}`}
+
+function fillSelect(el,values,label){
+  const frag=document.createDocumentFragment();
+  const first=document.createElement("option");
+  first.value="";first.textContent=label;frag.append(first);
+  for(const value of values){const op=document.createElement("option");op.value=value;op.textContent=value;frag.append(op)}
+  el.replaceChildren(frag);
+}
+
+async function fetchZipWithProgress(url){
+  const response=await fetch(url,{cache:"force-cache"});
+  if(!response.ok)throw new Error(`No pude descargar ${url}. HTTP ${response.status}`);
+  const totalBytes=Number(response.headers.get("content-length"))||0;
+
+  if(!response.body||!response.body.getReader){
+    zipText.textContent="Descargando album.zip...";
+    return await response.arrayBuffer();
+  }
+
+  const reader=response.body.getReader();
+  const chunks=[];
+  let received=0;
+
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    chunks.push(value);received+=value.byteLength;
+
+    if(totalBytes>0){
+      const percent=Math.min(100,(received/totalBytes)*100);
+      zipProgress.style.width=`${percent}%`;
+      zipText.textContent=`Descargando portadas · ${Math.round(percent)}% · ${formatBytes(received)} / ${formatBytes(totalBytes)}`;
+    }else{
+      zipText.textContent=`Descargando portadas · ${formatBytes(received)}`;
+    }
+  }
+
+  const merged=new Uint8Array(received);
+  let offset=0;
+  for(const chunk of chunks){merged.set(chunk,offset);offset+=chunk.byteLength}
+  return merged.buffer;
+}
+
+async function putCoverFromZip(coverBox){
+  if(!coverBox||coverBox.dataset.loaded==="1"||coverBox.dataset.loaded==="loading")return;
+  const internalPath=coverBox.dataset.cover;
+  if(!internalPath||!zipReady||!albumZip)return;
+
+  coverBox.dataset.loaded="loading";
+
+  try{
+    const zipFile=albumZip.file(internalPath);
+    if(!zipFile){coverBox.dataset.loaded="error";return}
+
+    const blob=await zipFile.async("blob");
+    if(!coverBox.isConnected)return;
+
+    const objectUrl=URL.createObjectURL(blob);
+    const img=document.createElement("img");
+    img.className="cover";
+    img.alt=`Portada de ${coverBox.dataset.album||"álbum"}`;
+    img.src=objectUrl;
+    img.dataset.objectUrl=objectUrl;
+
+    img.addEventListener("load",()=>{
+      img.classList.add("loaded");
+      const placeholder=coverBox.querySelector(".placeholder");
+      if(placeholder)setTimeout(()=>placeholder.remove(),230);
+    },{once:true});
+
+    img.addEventListener("error",()=>URL.revokeObjectURL(objectUrl),{once:true});
+    coverBox.prepend(img);
+    coverBox.dataset.loaded="1";
+  }catch(error){
+    console.error("Error leyendo portada:",internalPath,error);
+    coverBox.dataset.loaded="error";
+  }
+}
+
+const coverObserver=new IntersectionObserver(entries=>{
+  for(const entry of entries){
+    const box=entry.target;
+    if(entry.isIntersecting){
+      visibleCoverBoxes.add(box);
+      if(zipReady)putCoverFromZip(box);
+    }else{
+      visibleCoverBoxes.delete(box);
+    }
+  }
+},{rootMargin:"450px 0px"});
+
+function observeCurrentCovers(){
+  document.querySelectorAll(".coverbox[data-cover]").forEach(box=>coverObserver.observe(box));
+}
+
+function loadVisibleCovers(){
+  if(!zipReady)return;
+  for(const box of visibleCoverBoxes)putCoverFromZip(box);
+}
+
+function cleanupRenderedImages(){
+  grid.querySelectorAll("img[data-object-url]").forEach(img=>{
+    if(img.dataset.objectUrl)URL.revokeObjectURL(img.dataset.objectUrl);
+  });
+  grid.querySelectorAll(".coverbox").forEach(box=>{
+    coverObserver.unobserve(box);
+    visibleCoverBoxes.delete(box);
+  });
+}
+
+function card(s){
+  const el=document.createElement("article");
+  el.className="card";
+  el.title=`${s.name} — ${s.artist}`;
+
+  const coverBox=document.createElement("div");
+  coverBox.className="coverbox";
+  coverBox.dataset.album=s.album||"";
+  if(s.cover)coverBox.dataset.cover=s.cover;
+  coverBox.innerHTML=`<div class="placeholder"><div class="disc"></div></div><span class="genre">${esc(s.genre)}</span>`;
+
+  const info=document.createElement("div");
+  info.className="info";
+  info.innerHTML=`<h3 class="song">${esc(s.name)}</h3><p class="artist">${esc(s.artist)}</p><p class="album">${esc(s.album)}</p>`;
+
+  el.append(coverBox,info);
+  return el;
+}
+
+function render(list){
+  cleanupRenderedImages();
+  const frag=document.createDocumentFragment();
+  for(const s of list)frag.append(card(s));
+  grid.replaceChildren(frag);
+  count.textContent=`${list.length.toLocaleString("es-MX")} resultado${list.length===1?"":"s"}`;
+  empty.style.display=list.length?"none":"block";
+  requestAnimationFrame(()=>{observeCurrentCovers();if(zipReady)loadVisibleCovers()});
+}
+
+function apply(){
+  const terms=norm(q.value).split(/\s+/).filter(Boolean),g=genre.value,a=artist.value;
+  const list=songs.filter(s=>{
+    if(g&&s.genre!==g)return false;
+    if(a&&s.artist!==a)return false;
+    if(!terms.length)return true;
+    const hay=norm(`${s.name} ${s.artist} ${s.album} ${s.genre}`);
+    return terms.every(t=>hay.includes(t));
+  });
+  render(list);
+}
+
+async function loadSongs(){
+  const r=await fetch(JSON_URL,{cache:"no-store"});
+  if(!r.ok)throw new Error(`No pude cargar ${JSON_URL}. HTTP ${r.status}`);
+  songs=await r.json();
+  total.textContent=songs.length.toLocaleString("es-MX");
+  fillSelect(genre,unique(songs.map(s=>s.genre)),"Todos los géneros");
+  fillSelect(artist,unique(songs.map(s=>s.artist)),"Todos los artistas");
+  loading.style.display="none";
+  render(songs);
+}
+
+async function loadAlbumZip(){
+  if(typeof JSZip==="undefined")throw new Error("No se pudo cargar JSZip.");
+  zipText.textContent="Descargando album.zip...";
+  const zipBuffer=await fetchZipWithProgress(ZIP_URL);
+  zipText.textContent=`Abriendo ${formatBytes(zipBuffer.byteLength)} de portadas...`;
+  zipProgress.style.width="100%";
+  albumZip=await JSZip.loadAsync(zipBuffer);
+  zipReady=true;
+  zipStatus.classList.add("ready");
+  zipText.textContent=`Portadas listas · ${formatBytes(zipBuffer.byteLength)} descargados`;
+  loadVisibleCovers();
+}
+
+async function start(){
+  try{
+    await loadSongs();
+  }catch(error){
+    console.error(error);
+    loading.innerHTML='<strong style="color:#fff">No pude cargar songs.json</strong><br><br>Comprueba que index.html y songs.json estén juntos.';
+    return;
+  }
+
+  try{
+    await loadAlbumZip();
+  }catch(error){
+    console.error(error);
+    zipStatus.classList.add("error");
+    zipText.textContent="No pude cargar album.zip. Las canciones seguirán visibles, pero sin portadas.";
+    zipProgress.style.width="0%";
+  }
+}
+
+let timer=null;
+q.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(apply,70)});
+genre.addEventListener("change",apply);
+artist.addEventListener("change",apply);
+window.addEventListener("beforeunload",cleanupRenderedImages);
+start();
 </script>
 </body>
 </html>
